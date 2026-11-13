@@ -50,8 +50,30 @@ jobs:
           mkdir -p .local/linux-test
           tar -xzf dist/*-linux-x64.tar.gz --strip-components=1 -C .local/linux-test
           CURRYCLIENT_EXECUTABLE="$PWD/.local/linux-test/curryclient" xvfb-run -a npm test
+      - name: Verify the AppImage launcher
+        run: |
+          appimages=("$PWD"/dist/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          test -x "${appimages[0]}"
+          mkdir -p .local/appimage-test
+          (cd .local/appimage-test && "${appimages[0]}" --appimage-extract > /dev/null)
+          cmp electron/AppRun .local/appimage-test/squashfs-root/AppRun
+          test -f .local/appimage-test/squashfs-root/curryclient.desktop
+          if grep -q -- '--no-sandbox' .local/appimage-test/squashfs-root/curryclient.desktop; then
+            echo 'The desktop entry must preserve sandboxing' >&2
+            exit 1
+          fi
+      - name: Smoke-test the AppImage
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse2
+          appimages=("$PWD"/dist/*.AppImage)
+          CURRYCLIENT_EXECUTABLE="${appimages[0]}" xvfb-run -a npm test
       - uses: actions/upload-artifact@v4
         with:
           name: CurryClient-Linux
-          path: dist/*-linux-x64.tar.gz
+          path: |
+            dist/*-linux-x64.tar.gz
+            dist/*.AppImage
           if-no-files-found: error
